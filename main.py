@@ -421,3 +421,5 @@ async def on_message(message):
         await message.channel.send(f"⚠️ Error interno: {e}")
 
 client.run(discord_token)
+# probando permisos admin
+
