@@ -40,7 +40,7 @@ async def crear_categoria(guild, nombre):
     return f"⚠️ Ya existe la categoría {nombre}"
 
 async def asignar_rol(guild, miembro_nombre, rol_nombre):
-    miembro = discord.utils.get(guild.members, name=miembro_nombre)
+    miembro = discord.utils.find(lambda m: m.name == miembro_nombre or m.display_name == miembro_nombre, guild.members)
     rol = discord.utils.get(guild.roles, name=rol_nombre)
     if miembro and rol:
         await miembro.add_roles(rol)
@@ -77,7 +77,7 @@ Si es una conversación trivial o cultural, responde de forma conversacional.
 """
 
     try:
-        response = openai.ChatCompletion.create(
+        response = openai.chat.completions.create(
             model="gpt-4-turbo",
             messages=[
                 {"role": "system", "content": system_prompt},
@@ -113,7 +113,6 @@ Si es una conversación trivial o cultural, responde de forma conversacional.
             await message.channel.send(resultado)
 
         except json.JSONDecodeError:
-            # Si no es JSON, se asume que es una respuesta conversacional
             if content:
                 await message.channel.send(content)
             else:
@@ -124,4 +123,3 @@ Si es una conversación trivial o cultural, responde de forma conversacional.
         await message.channel.send("⚠️ Hubo un error interno. Intenta de nuevo o revisa el formato del comando.")
 
 client.run(discord_token)
-
