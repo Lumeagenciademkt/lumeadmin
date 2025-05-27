@@ -10,6 +10,7 @@ client = discord.Client(intents=intents)
 discord_token = os.getenv("DISCORD_TOKEN")
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
+# Funciones de administración
 async def crear_canal(guild, nombre):
     channel_name = nombre.replace(" ", "-")[:100]
     existing = discord.utils.get(guild.text_channels, name=channel_name)
@@ -52,10 +53,12 @@ async def programar_recordatorio(message, segundos, contenido):
     await asyncio.sleep(segundos)
     await message.channel.send(f"🔔 Recordatorio: {contenido}")
 
+# Evento cuando el bot está listo
 @client.event
 async def on_ready():
     print(f"✅ Lume está conectado como {client.user}")
 
+# Evento para manejar mensajes
 @client.event
 async def on_message(message):
     if message.author == client.user:
@@ -77,7 +80,7 @@ Si es una conversación trivial o cultural, responde de forma conversacional.
 """
 
     try:
-        response = openai.chat.completions.create(
+        response = openai.ChatCompletion.create(
             model="gpt-4-turbo",
             messages=[
                 {"role": "system", "content": system_prompt},
@@ -88,6 +91,7 @@ Si es una conversación trivial o cultural, responde de forma conversacional.
 
         content = response.choices[0].message.content.strip()
 
+        # Intentar detectar si la respuesta es JSON
         try:
             data = json.loads(content)
             action = data.get("action")
@@ -113,11 +117,13 @@ Si es una conversación trivial o cultural, responde de forma conversacional.
             await message.channel.send(resultado)
 
         except json.JSONDecodeError:
+            # No es JSON, solo responde el mensaje como conversación
             await message.channel.send(content)
 
     except Exception as e:
-        print("❌ Error:", e)
+        print("❌ Error general:", e)
         await message.channel.send("⚠️ Hubo un error interno. Puedes intentar de nuevo o revisar el formato del comando.")
 
+# Ejecutar el bot
 client.run(discord_token)
 
