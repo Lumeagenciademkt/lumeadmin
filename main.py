@@ -10,26 +10,23 @@ client = discord.Client(intents=intents)
 discord_token = os.getenv("DISCORD_TOKEN")
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
-# Funciones administrativas
 async def crear_canal(guild, nombre):
-    nombre = nombre.replace(" ", "-").lower()
-    existente = discord.utils.get(guild.text_channels, name=nombre)
-    if not existente:
-        await guild.create_text_channel(nombre)
-        return f"✅ Canal creado: #{nombre}"
-    return f"⚠️ Ya existe el canal #{nombre}"
+    channel_name = nombre.replace(" ", "-")[:100]
+    existing = discord.utils.get(guild.text_channels, name=channel_name)
+    if not existing:
+        await guild.create_text_channel(channel_name)
+        return f"✅ Canal creado: #{channel_name}"
+    return f"⚠️ Ya existe un canal llamado #{channel_name}"
 
 async def eliminar_canal(guild, nombre):
-    nombre = nombre.replace(" ", "-").lower()
-    canal = discord.utils.get(guild.text_channels, name=nombre)
+    canal = discord.utils.get(guild.text_channels, name=nombre.replace(" ", "-").lower())
     if canal:
         await canal.delete()
         return f"🗑️ Canal eliminado: #{nombre}"
     return f"❌ No encontré el canal #{nombre}"
 
 async def enviar_mensaje(guild, canal_nombre, contenido):
-    canal_nombre = canal_nombre.replace(" ", "-").lower()
-    canal = discord.utils.get(guild.text_channels, name=canal_nombre)
+    canal = discord.utils.get(guild.text_channels, name=canal_nombre.replace(" ", "-").lower())
     if canal:
         await canal.send(contenido)
         return f"📨 Mensaje enviado a #{canal_nombre}"
@@ -68,19 +65,20 @@ async def on_message(message):
     guild = message.guild
 
     system_prompt = """
-Eres Lume, un asistente virtual con permisos administrativos en este servidor. Si el usuario da una orden clara relacionada a Discord, responde en formato JSON con:
+Eres Lume, un asistente virtual con acceso total al servidor de Discord. Tu función es interpretar comandos de lenguaje natural y transformarlos en acciones dentro del servidor. Si la acción es clara, responde únicamente en JSON con el formato:
 {
   "action": "nombre_funcion",
   "params": {
-    "param1": "valor1"
+    "param1": "valor1",
+    "param2": "valor2"
   }
 }
-Si no es una orden o no estás seguro, responde normalmente como asistente conversacional.
+Si es una conversación trivial o cultural, responde de forma conversacional.
 """
 
     try:
         response = openai.ChatCompletion.create(
-            model="gpt-4-turbo",
+            model="gpt-4",
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt}
@@ -88,9 +86,8 @@ Si no es una orden o no estás seguro, responde normalmente como asistente conve
             temperature=0.3
         )
 
-        content = response.choices[0].message.content.strip()
+        content = response["choices"][0]["message"]["content"].strip()
 
-        # Intentar decodificar JSON si es un comando
         try:
             data = json.loads(content)
             action = data.get("action")
@@ -111,16 +108,15 @@ Si no es una orden o no estás seguro, responde normalmente como asistente conve
                 await programar_recordatorio(message, int(params.get("segundos", 60)), params.get("contenido", ""))
                 return
             else:
-                resultado = "⚠️ Comando no reconocido."
+                resultado = "🤖 Aún no sé cómo hacer eso, pero estoy aprendiendo."
 
             await message.channel.send(resultado)
 
         except json.JSONDecodeError:
-            # No es un comando, solo responder como asistente
             await message.channel.send(content)
 
     except Exception as e:
-        print("❌ Error general:", e)
-        await message.channel.send("⚠️ Hubo un error interno. Intenta de nuevo.")
+        print("❌ Error:", e)
+        await message.channel.send("⚠️ Hubo un error interno. Puedes intentar de nuevo o revisar el formato del comando.")
 
 client.run(discord_token)
