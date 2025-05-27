@@ -13,8 +13,8 @@ openai.api_key = os.getenv("OPENAI_API_KEY")
 
 # ========== EXTRAE JSON GPT ==========
 def extract_json(text):
+    # Busca el primer bloque JSON válido y lo devuelve como dict
     try:
-        # Encuentra todos los bloques JSON en la respuesta
         matches = re.findall(r'\{[\s\S]*?\}', text)
         for match in matches:
             try:
@@ -37,13 +37,10 @@ async def enviar_mensaje(channel, contenido):
     await channel.send(contenido)
     return "✅ Mensaje enviado."
 
-# Puedes agregar más funciones aquí
-
 # ========== MAPA DE ACCIONES ==========
 ACTION_MAP = {
     "crear_canal": crear_canal,
     "enviar_mensaje": enviar_mensaje,
-    # Agrega aquí más funciones según crezcas
 }
 
 # ========== PROMPT PARA GPT ==========
@@ -91,7 +88,6 @@ async def on_message(message):
             temperature=0.1
         )
         content = response.choices[0].message.content.strip()
-        print("Respuesta GPT:", content)
         data = extract_json(content)
 
         if not data:
@@ -101,24 +97,15 @@ async def on_message(message):
         action = data.get("action")
         params = data.get("params", {})
 
-        # Crea canal
-        if action == "crear_canal":
-            nombre = params.get("nombre")
-            if not nombre:
-                await message.channel.send("❗ Debes indicar el nombre del canal.")
-                return
-            resultado = await crear_canal(message.guild, nombre)
+        if action in ACTION_MAP:
+            # Llama la función adecuada con los parámetros correctos
+            if action == "crear_canal":
+                resultado = await ACTION_MAP[action](message.guild, **params)
+            elif action == "enviar_mensaje":
+                resultado = await ACTION_MAP[action](message.channel, **params)
+            else:
+                resultado = "⚠️ Acción reconocida pero no implementada aún."
             await message.channel.send(resultado)
-
-        # Enviar mensaje
-        elif action == "enviar_mensaje":
-            texto = params.get("contenido") or params.get("mensaje")
-            if not texto:
-                texto = "Hola! ¿En qué puedo ayudarte hoy?"
-            await enviar_mensaje(message.channel, texto)
-
-        # Puedes añadir más elif aquí para otras acciones...
-
         else:
             await message.channel.send(f"🤖 Acción reconocida pero no implementada: {action}")
 
