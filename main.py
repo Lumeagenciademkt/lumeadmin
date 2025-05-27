@@ -13,14 +13,16 @@ openai.api_key = os.getenv("OPENAI_API_KEY")
 
 # ========== EXTRAE JSON GPT ==========
 def extract_json(text):
-    match = re.search(r'\{[\s\S]*?\}', text)
-    if match:
-        try:
-            json.loads(match.group(0))
-            return match.group(0)
-        except Exception as e:
-            print("Error decoding JSON:", e)
-            return None
+    try:
+        # Encuentra todos los bloques JSON en la respuesta
+        matches = re.findall(r'\{[\s\S]*?\}', text)
+        for match in matches:
+            try:
+                return json.loads(match)
+            except Exception:
+                continue
+    except Exception as e:
+        print("Error buscando JSON:", e)
     return None
 
 # ========== FUNCIONES DISCORD ==========
@@ -35,10 +37,13 @@ async def enviar_mensaje(channel, contenido):
     await channel.send(contenido)
     return "✅ Mensaje enviado."
 
+# Puedes agregar más funciones aquí
+
 # ========== MAPA DE ACCIONES ==========
 ACTION_MAP = {
     "crear_canal": crear_canal,
     "enviar_mensaje": enviar_mensaje,
+    # Agrega aquí más funciones según crezcas
 }
 
 # ========== PROMPT PARA GPT ==========
@@ -86,23 +91,34 @@ async def on_message(message):
             temperature=0.1
         )
         content = response.choices[0].message.content.strip()
-        json_block = extract_json(content)
+        print("Respuesta GPT:", content)
+        data = extract_json(content)
 
-        if not json_block:
+        if not data:
             await message.channel.send(f"❌ No entendí tu mensaje. Respuesta GPT: {content}")
             return
 
-        data = json.loads(json_block)
         action = data.get("action")
         params = data.get("params", {})
 
-        if action in ACTION_MAP:
-            if action == "crear_canal":
-                resultado = await ACTION_MAP[action](message.guild, **params)
-            else:
-                resultado = await ACTION_MAP[action](message.channel, **params)
-
+        # Crea canal
+        if action == "crear_canal":
+            nombre = params.get("nombre")
+            if not nombre:
+                await message.channel.send("❗ Debes indicar el nombre del canal.")
+                return
+            resultado = await crear_canal(message.guild, nombre)
             await message.channel.send(resultado)
+
+        # Enviar mensaje
+        elif action == "enviar_mensaje":
+            texto = params.get("contenido") or params.get("mensaje")
+            if not texto:
+                texto = "Hola! ¿En qué puedo ayudarte hoy?"
+            await enviar_mensaje(message.channel, texto)
+
+        # Puedes añadir más elif aquí para otras acciones...
+
         else:
             await message.channel.send(f"🤖 Acción reconocida pero no implementada: {action}")
 
@@ -111,5 +127,3 @@ async def on_message(message):
         await message.channel.send(f"⚠️ Error interno del bot: {e}")
 
 client.run(discord_token)
-
-
