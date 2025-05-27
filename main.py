@@ -6,6 +6,7 @@ import json
 import re
 from datetime import datetime, timedelta
 from collections import defaultdict
+# test deploy para Render
 
 intents = discord.Intents.all()
 client = discord.Client(intents=intents)
