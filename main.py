@@ -77,7 +77,7 @@ Si es una conversación trivial o cultural, responde de forma conversacional.
 """
 
     try:
-        response = openai.ChatCompletion.create(
+        response = openai.chat.completions.create(
             model="gpt-4-turbo",
             messages=[
                 {"role": "system", "content": system_prompt},
@@ -88,7 +88,6 @@ Si es una conversación trivial o cultural, responde de forma conversacional.
 
         content = response.choices[0].message.content.strip()
 
-        # Intentamos interpretar el contenido como JSON
         try:
             data = json.loads(content)
             action = data.get("action")
@@ -114,11 +113,10 @@ Si es una conversación trivial o cultural, responde de forma conversacional.
             await message.channel.send(resultado)
 
         except json.JSONDecodeError:
-            # No era JSON, respondemos como asistente conversacional
             await message.channel.send(content)
 
     except Exception as e:
-        print("❌ Error de ejecución:", e)
+        print("❌ Error:", e)
         await message.channel.send("⚠️ Hubo un error interno. Puedes intentar de nuevo o revisar el formato del comando.")
 
 client.run(discord_token)
