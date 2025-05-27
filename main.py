@@ -120,7 +120,8 @@ Si es una conversación trivial o cultural, responde de forma conversacional.
             await message.channel.send(content)
 
     except Exception as e:
-        print("❌ Error:", e)
+        import traceback
+        traceback.print_exc()
         await message.channel.send("Ocurrió un error. Intenta de nuevo.")
 
 client.run(discord_token)
