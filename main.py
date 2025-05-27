@@ -26,12 +26,14 @@ def add_to_history(channel_id, role, content):
 
 # ==== Helper para extraer JSON ====
 def extract_json(text):
+    # Busca el primer bloque JSON en la respuesta
     match = re.search(r'\{[\s\S]*?\}', text)
     if match:
         try:
             json.loads(match.group(0))
             return match.group(0)
-        except:
+        except Exception as e:
+            print("Error decoding JSON:", e)
             return None
     return None
 
@@ -147,16 +149,16 @@ async def pinar_mensaje(message_id, canal):
         msg = await canal.fetch_message(int(message_id))
         await msg.pin()
         return "📌 Mensaje pineado."
-    except:
-        return "❌ No se pudo pinear el mensaje."
+    except Exception as e:
+        return f"❌ No se pudo pinear el mensaje: {e}"
 
 async def despinar_mensaje(message_id, canal):
     try:
         msg = await canal.fetch_message(int(message_id))
         await msg.unpin()
         return "📍 Mensaje despineado."
-    except:
-        return "❌ No se pudo despinear el mensaje."
+    except Exception as e:
+        return f"❌ No se pudo despinear el mensaje: {e}"
 
 async def cambiar_nombre_servidor(guild, nuevo_nombre):
     await guild.edit(name=nuevo_nombre)
@@ -206,7 +208,7 @@ async def eliminar_evento(guild, nombre):
         return f"🗑️ Evento eliminado: {nombre}"
     return f"❌ No se encontró el evento."
 
-# ==== Mapeador de acciones (en español e inglés para robustez) ====
+# ==== Mapeador de acciones (español e inglés) ====
 ACTION_MAP = {
     "crear_canal": crear_canal,
     "eliminar_canal": eliminar_canal,
@@ -229,7 +231,7 @@ ACTION_MAP = {
     "programar_recordatorio": programar_recordatorio,
     "crear_evento": crear_evento,
     "eliminar_evento": eliminar_evento,
-    # Aliases en inglés para compatibilidad GPT (por si acaso)
+    # Aliases
     "create_channel": crear_canal,
     "delete_channel": eliminar_canal,
     "rename_channel": renombrar_canal,
@@ -269,7 +271,6 @@ Tu misión es interpretar cualquier petición, incluso si está escrita en lengu
     - crear_evento, eliminar_evento
     - pinar_mensaje, despinar_mensaje
     - cambiar_nombre_servidor, cambiar_icono_servidor
-    - (Siempre en español, nunca en inglés)
 2. Si falta algún dato clave para ejecutar la acción (nombre, usuario, fecha, canal, etc.), pregunta solo por ese dato de forma amable, breve y jovial, y espera respuesta antes de continuar.
 3. Si la petición es trivial o conversación general, responde conversacionalmente.
 4. No expliques el bloque JSON, solo genera el bloque limpio.
