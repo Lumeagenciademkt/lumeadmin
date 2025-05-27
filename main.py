@@ -13,16 +13,13 @@ openai.api_key = os.getenv("OPENAI_API_KEY")
 
 # ========== EXTRAE JSON GPT ==========
 def extract_json(text):
-    # Busca el primer bloque JSON válido y lo devuelve como dict
-    try:
-        matches = re.findall(r'\{[\s\S]*?\}', text)
-        for match in matches:
-            try:
-                return json.loads(match)
-            except Exception:
-                continue
-    except Exception as e:
-        print("Error buscando JSON:", e)
+    match = re.search(r'\{[\s\S]*?\}', text)
+    if match:
+        try:
+            return json.loads(match.group(0))
+        except Exception as e:
+            print("Error decoding JSON:", e)
+            return None
     return None
 
 # ========== FUNCIONES DISCORD ==========
@@ -58,7 +55,7 @@ Respuesta:
   "action": "enviar_mensaje",
   "params": { "contenido": "hola" }
 }
-Si no se entiende, responde:
+Si no entiendes, responde:
 {
   "action": "enviar_mensaje",
   "params": { "contenido": "Hola! ¿En qué puedo ayudarte hoy?" }
@@ -90,24 +87,22 @@ async def on_message(message):
         content = response.choices[0].message.content.strip()
         data = extract_json(content)
 
-        if not data:
-            await message.channel.send(f"❌ No entendí tu mensaje. Respuesta GPT: {content}")
-            return
+        if isinstance(data, dict) and data.get("action"):
+            action = data.get("action")
+            params = data.get("params", {})
 
-        action = data.get("action")
-        params = data.get("params", {})
-
-        if action in ACTION_MAP:
-            # Llama la función adecuada con los parámetros correctos
-            if action == "crear_canal":
-                resultado = await ACTION_MAP[action](message.guild, **params)
-            elif action == "enviar_mensaje":
-                resultado = await ACTION_MAP[action](message.channel, **params)
+            if action in ACTION_MAP:
+                if action == "crear_canal":
+                    resultado = await ACTION_MAP[action](message.guild, **params)
+                elif action == "enviar_mensaje":
+                    resultado = await ACTION_MAP[action](message.channel, **params)
+                else:
+                    resultado = "⚠️ Acción reconocida pero no implementada aún."
+                await message.channel.send(resultado)
             else:
-                resultado = "⚠️ Acción reconocida pero no implementada aún."
-            await message.channel.send(resultado)
+                await message.channel.send(f"🤖 Acción reconocida pero no implementada: {action}")
         else:
-            await message.channel.send(f"🤖 Acción reconocida pero no implementada: {action}")
+            await message.channel.send(f"❌ No entendí tu mensaje. Respuesta GPT:\n```{content}```")
 
     except Exception as e:
         print("❌ Error:", e)
