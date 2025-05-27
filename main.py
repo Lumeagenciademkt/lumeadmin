@@ -61,8 +61,6 @@ async def on_message(message):
     if message.author == client.user:
         return
 
-    print(f"🟡 Mensaje recibido: {message.content} de {message.author}")
-
     user_prompt = message.content
     guild = message.guild
 
@@ -80,7 +78,7 @@ Si es una conversación trivial o cultural, responde de forma conversacional.
 
     try:
         response = openai.ChatCompletion.create(
-            model="gpt-4",
+            model="gpt-4-turbo",
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt}
@@ -89,7 +87,6 @@ Si es una conversación trivial o cultural, responde de forma conversacional.
         )
 
         content = response.choices[0].message.content.strip()
-        print(f"🧠 Respuesta generada:\n{content}")
 
         try:
             data = json.loads(content)
@@ -119,7 +116,7 @@ Si es una conversación trivial o cultural, responde de forma conversacional.
             await message.channel.send(content)
 
     except Exception as e:
-        print("❌ Error en on_message:", e)
-        await message.channel.send("⚠️ Hubo un error interno. Intenta de nuevo.")
+        print("❌ Error de ejecución:", e)
+        await message.channel.send("⚠️ Hubo un error interno. Intenta de nuevo o revisa el formato del comando.")
 
 client.run(discord_token)
