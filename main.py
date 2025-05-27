@@ -3,13 +3,14 @@ import openai
 import os
 import asyncio
 import json
-import traceback
 
 intents = discord.Intents.all()
 client = discord.Client(intents=intents)
 
 discord_token = os.getenv("DISCORD_TOKEN")
 openai.api_key = os.getenv("OPENAI_API_KEY")
+
+client_gpt = openai.OpenAI()  # NUEVA FORMA
 
 async def crear_canal(guild, nombre):
     channel_name = nombre.replace(" ", "-")[:100]
@@ -78,7 +79,7 @@ Si es una conversación trivial o cultural, responde de forma conversacional.
 """
 
     try:
-        response = openai.ChatCompletion.create(
+        response = client_gpt.chat.completions.create(
             model="gpt-4-turbo",
             messages=[
                 {"role": "system", "content": system_prompt},
@@ -117,7 +118,7 @@ Si es una conversación trivial o cultural, responde de forma conversacional.
             await message.channel.send(content)
 
     except Exception as e:
-        traceback.print_exc()
+        print("❌ Error:", e)
         await message.channel.send("Ocurrió un error. Intenta de nuevo.")
 
 client.run(discord_token)
