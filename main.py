@@ -26,7 +26,6 @@ def add_to_history(channel_id, role, content):
 
 # ==== Helper para extraer JSON ====
 def extract_json(text):
-    # Busca el primer bloque JSON en la respuesta
     match = re.search(r'\{[\s\S]*?\}', text)
     if match:
         try:
@@ -39,6 +38,7 @@ def extract_json(text):
 
 # ==== Funciones administrativas Discord ====
 async def crear_canal(guild, nombre, categoria=None):
+    print(f"Intentando crear canal: {nombre}, en categoria: {categoria}")
     channel_name = nombre.replace(" ", "-")[:100]
     if discord.utils.get(guild.text_channels, name=channel_name):
         return f"⚠️ Ya existe un canal llamado #{channel_name}"
@@ -320,6 +320,8 @@ async def on_message(message):
     channel_id = str(message.channel.id)
     user_prompt = message.content
 
+    print("🔴 Mensaje recibido:", user_prompt)
+
     add_to_history(channel_id, "user", user_prompt)
     history = [{"role": "system", "content": system_prompt}] + get_history(channel_id)
 
@@ -330,20 +332,23 @@ async def on_message(message):
             temperature=0.2
         )
         content = response.choices[0].message.content.strip()
-        print("🔎 GPT:", content)
+        print("🟠 Respuesta GPT:", content)
 
         add_to_history(channel_id, "assistant", content)
         json_block = extract_json(content)
+        print("🟡 JSON extraído:", json_block)
+
         if json_block:
             try:
                 data = json.loads(json_block)
                 action = data.get("action")
                 params = data.get("params", {})
+                print("🟢 Acción:", action)
+                print("🟢 Params:", params)
                 funcion = ACTION_MAP.get(action)
 
                 resultado = None
                 if funcion:
-                    # Despacho dinámico (ajusta según parámetros de cada función)
                     if action in ["crear_canal", "create_channel"]:
                         resultado = await funcion(message.guild, params.get("nombre"), params.get("categoria"))
                     elif action in ["eliminar_canal", "delete_channel"]:
@@ -398,6 +403,7 @@ async def on_message(message):
                     resultado = "🤖 Acción reconocida pero no está implementada en el bot."
 
                 await message.channel.send(resultado)
+                print("🟣 Resultado enviado:", resultado)
                 return
 
             except Exception as ex:
@@ -405,8 +411,8 @@ async def on_message(message):
                 await message.channel.send(f"⚠️ Error ejecutando el comando: {ex}")
                 return
 
-        # Si no hay JSON: es charla, saludo o GPT pide info faltante
         await message.channel.send(content if content else "⚠️ No entendí el mensaje, ¿puedes explicarlo de otra forma?")
+        print("🔵 Mensaje no ejecutado, solo respuesta GPT.")
         return
 
     except Exception as e:
