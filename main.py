@@ -5,6 +5,7 @@ import asyncio
 import json
 import re
 from datetime import datetime, timedelta
+from collections import defaultdict
 
 intents = discord.Intents.all()
 client = discord.Client(intents=intents)
@@ -12,7 +13,18 @@ client = discord.Client(intents=intents)
 discord_token = os.getenv("DISCORD_TOKEN")
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
-# Helper para extraer JSON
+# ==== Memoria contextual por canal ====
+message_history = defaultdict(list)
+
+def get_history(channel_id):
+    return message_history[channel_id][-12:]  # Últimos 12 turnos
+
+def add_to_history(channel_id, role, content):
+    message_history[channel_id].append({"role": role, "content": content})
+    if len(message_history[channel_id]) > 12:
+        message_history[channel_id] = message_history[channel_id][-12:]
+
+# ==== Helper para extraer JSON ====
 def extract_json(text):
     match = re.search(r'\{[\s\S]*?\}', text)
     if match:
@@ -23,8 +35,7 @@ def extract_json(text):
             return None
     return None
 
-# === ACCIONES ADMINISTRATIVAS ===
-
+# ==== Funciones administrativas Discord ====
 async def crear_canal(guild, nombre, categoria=None):
     channel_name = nombre.replace(" ", "-")[:100]
     if discord.utils.get(guild.text_channels, name=channel_name):
@@ -139,7 +150,7 @@ async def pinar_mensaje(message_id, canal):
     except:
         return "❌ No se pudo pinear el mensaje."
 
-async def despin_mensaje(message_id, canal):
+async def despinar_mensaje(message_id, canal):
     try:
         msg = await canal.fetch_message(int(message_id))
         await msg.unpin()
@@ -195,47 +206,106 @@ async def eliminar_evento(guild, nombre):
         return f"🗑️ Evento eliminado: {nombre}"
     return f"❌ No se encontró el evento."
 
-# === SYSTEM PROMPT UNIVERSAL Y ROBUSTO ===
-
-system_prompt = """
-Eres Lume, un asistente virtual con acceso ilimitado a TODAS las herramientas administrativas, colaborativas y de organización de este servidor de Discord. 
-Tu misión es entender cualquier petición, aunque esté en lenguaje natural, coloquial, joven, profesional, ambigua o indirecta, y transformarla en la acción administrativa más adecuada.
-
-Tus capacidades incluyen, pero no se limitan a:
-- Crear, eliminar, renombrar y mover canales y categorías.
-- Crear, eliminar, renombrar y asignar roles.
-- Modificar permisos de canales, roles y usuarios.
-- Asignar o quitar roles y responsabilidades.
-- Crear, completar, asignar y eliminar tareas o recordatorios.
-- Agendar y eliminar eventos y notificaciones.
-- Pinar/despinar mensajes.
-- Enviar mensajes, notificaciones y avisos.
-- Cambiar nombre, icono y configuración general del servidor.
-- Organizar flujos, tareas, calendarios y permisos avanzados.
-- TODO lo posible en Discord para admins.
-
-INSTRUCCIONES:
-1. Interpreta siempre la intención, aunque sea vaga o imprecisa. Si te falta algún dato (nombre, usuario, fecha, canal, etc), pregunta SOLO eso y espera respuesta.
-2. Si tienes todo lo necesario, responde ÚNICAMENTE en JSON, así:
-{
-  "action": "nombre_funcion",
-  "params": {
-    "param1": "valor1",
-    "param2": "valor2"
-  }
+# ==== Mapeador de acciones (en español e inglés para robustez) ====
+ACTION_MAP = {
+    "crear_canal": crear_canal,
+    "eliminar_canal": eliminar_canal,
+    "renombrar_canal": renombrar_canal,
+    "mover_canal": mover_canal,
+    "crear_categoria": crear_categoria,
+    "eliminar_categoria": eliminar_categoria,
+    "renombrar_categoria": renombrar_categoria,
+    "crear_rol": crear_rol,
+    "eliminar_rol": eliminar_rol,
+    "renombrar_rol": renombrar_rol,
+    "asignar_rol": asignar_rol,
+    "quitar_rol": quitar_rol,
+    "modificar_permisos_canal": modificar_permisos_canal,
+    "enviar_mensaje": enviar_mensaje,
+    "pinar_mensaje": pinar_mensaje,
+    "despinar_mensaje": despinar_mensaje,
+    "cambiar_nombre_servidor": cambiar_nombre_servidor,
+    "cambiar_icono_servidor": cambiar_icono_servidor,
+    "programar_recordatorio": programar_recordatorio,
+    "crear_evento": crear_evento,
+    "eliminar_evento": eliminar_evento,
+    # Aliases en inglés para compatibilidad GPT (por si acaso)
+    "create_channel": crear_canal,
+    "delete_channel": eliminar_canal,
+    "rename_channel": renombrar_canal,
+    "move_channel": mover_canal,
+    "create_category": crear_categoria,
+    "delete_category": eliminar_categoria,
+    "rename_category": renombrar_categoria,
+    "create_role": crear_rol,
+    "delete_role": eliminar_rol,
+    "rename_role": renombrar_rol,
+    "assign_role": asignar_rol,
+    "remove_role": quitar_rol,
+    "modify_channel_permissions": modificar_permisos_canal,
+    "send_message": enviar_mensaje,
+    "pin_message": pinar_mensaje,
+    "unpin_message": despinar_mensaje,
+    "change_server_name": cambiar_nombre_servidor,
+    "change_server_icon": cambiar_icono_servidor,
+    "set_reminder": programar_recordatorio,
+    "create_event": crear_evento,
+    "delete_event": eliminar_evento,
 }
-3. Si el mensaje es trivial, saludo o conversación casual, responde de forma conversacional.
-4. Sé amable, jovial y colaborativo siempre.
 
-EJEMPLOS:
-- "Haz un canal para ideas locas" → JSON para crear canal llamado ideas-locas.
-- "Haz que solo ventas vea este canal" → Si tienes canal y rol, ejecuta; si no, pregunta.
-- "Ponme un recordatorio mañana a las 3 de la reunión" → JSON para recordatorio, pide fecha si no está clara.
-- "Agrega el rol 'staff' a María" → JSON para asignar rol.
-- "Pina este mensaje" → JSON para pinar con id de mensaje.
+# ==== Prompt mejorado FULL ====
+system_prompt = """
+Eres Lume, el asistente virtual con acceso total a todas las funciones administrativas, organizativas y colaborativas de este servidor de Discord. 
+Tu misión es interpretar cualquier petición, incluso si está escrita en lenguaje coloquial, natural, joven, profesional, ambigua o indirecta, y ejecutarla usando las funciones del bot.
+
+**Instrucciones importantes:**
+1. Siempre responde con un bloque JSON usando estos nombres de acción en español SIEMPRE (aunque el usuario lo pida en inglés o de manera informal):
+    - crear_canal, eliminar_canal, renombrar_canal, mover_canal
+    - crear_categoria, eliminar_categoria, renombrar_categoria
+    - crear_rol, eliminar_rol, renombrar_rol, asignar_rol, quitar_rol
+    - modificar_permisos_canal
+    - enviar_mensaje
+    - programar_recordatorio
+    - crear_evento, eliminar_evento
+    - pinar_mensaje, despinar_mensaje
+    - cambiar_nombre_servidor, cambiar_icono_servidor
+    - (Siempre en español, nunca en inglés)
+2. Si falta algún dato clave para ejecutar la acción (nombre, usuario, fecha, canal, etc.), pregunta solo por ese dato de forma amable, breve y jovial, y espera respuesta antes de continuar.
+3. Si la petición es trivial o conversación general, responde conversacionalmente.
+4. No expliques el bloque JSON, solo genera el bloque limpio.
+5. Hazlo lo más natural y accesible posible: actúa como un asistente amigable, proactivo y jovial.
+
+**Ejemplos:**
+- Usuario: “Hazme un canal para ideas locas”
+  Responde: 
+  {
+    "action": "crear_canal",
+    "params": {
+      "nombre": "ideas-locas"
+    }
+  }
+- Usuario: “Dale el rol ‘Moderador’ a Renzo”
+  Responde:
+  {
+    "action": "asignar_rol",
+    "params": {
+      "usuario": "Renzo",
+      "rol": "Moderador"
+    }
+  }
+- Usuario: “Manda un mensaje a general: Bienvenidos”
+  Responde:
+  {
+    "action": "enviar_mensaje",
+    "params": {
+      "canal": "general",
+      "contenido": "Bienvenidos"
+    }
+  }
+Si el usuario dice: “Hazme un canal para ventas” pero no especifica nombre, pregunta: “¿Qué nombre quieres ponerle al canal?”
 """
 
-# === EVENTOS DISCORD ===
+# ==== Discord Events ====
 
 @client.event
 async def on_ready():
@@ -246,89 +316,96 @@ async def on_message(message):
     if message.author == client.user:
         return
 
+    channel_id = str(message.channel.id)
     user_prompt = message.content
-    guild = message.guild
+
+    add_to_history(channel_id, "user", user_prompt)
+    history = [{"role": "system", "content": system_prompt}] + get_history(channel_id)
 
     try:
         response = openai.chat.completions.create(
             model="gpt-4-turbo",
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt}
-            ],
+            messages=history,
             temperature=0.2
         )
         content = response.choices[0].message.content.strip()
         print("🔎 GPT:", content)
 
+        add_to_history(channel_id, "assistant", content)
         json_block = extract_json(content)
         if json_block:
             try:
                 data = json.loads(json_block)
                 action = data.get("action")
                 params = data.get("params", {})
+                funcion = ACTION_MAP.get(action)
 
-                # === Despacho centralizado de ACCIONES ===
-                resultado = "Acción ejecutada."
-
-                if action == "crear_canal":
-                    resultado = await crear_canal(guild, params.get("nombre"), params.get("categoria"))
-                elif action == "eliminar_canal":
-                    resultado = await eliminar_canal(guild, params.get("nombre"))
-                elif action == "renombrar_canal":
-                    resultado = await renombrar_canal(guild, params.get("actual"), params.get("nuevo"))
-                elif action == "mover_canal":
-                    resultado = await mover_canal(guild, params.get("nombre"), params.get("categoria"))
-                elif action == "crear_categoria":
-                    resultado = await crear_categoria(guild, params.get("nombre"))
-                elif action == "eliminar_categoria":
-                    resultado = await eliminar_categoria(guild, params.get("nombre"))
-                elif action == "renombrar_categoria":
-                    resultado = await renombrar_categoria(guild, params.get("actual"), params.get("nuevo"))
-                elif action == "crear_rol":
-                    resultado = await crear_rol(guild, params.get("nombre"))
-                elif action == "eliminar_rol":
-                    resultado = await eliminar_rol(guild, params.get("nombre"))
-                elif action == "renombrar_rol":
-                    resultado = await renombrar_rol(guild, params.get("actual"), params.get("nuevo"))
-                elif action == "asignar_rol":
-                    resultado = await asignar_rol(guild, params.get("usuario"), params.get("rol"))
-                elif action == "quitar_rol":
-                    resultado = await quitar_rol(guild, params.get("usuario"), params.get("rol"))
-                elif action == "modificar_permisos_canal":
-                    resultado = await modificar_permisos_canal(guild, params.get("canal"), params.get("rol"), params.get("permisos", {}))
-                elif action == "enviar_mensaje":
-                    resultado = await enviar_mensaje(guild, params.get("canal"), params.get("contenido"))
-                elif action == "pinar_mensaje":
-                    canal = discord.utils.get(guild.text_channels, name=params.get("canal", "").replace(" ", "-").lower())
-                    resultado = await pinar_mensaje(params.get("id"), canal)
-                elif action == "despinar_mensaje":
-                    canal = discord.utils.get(guild.text_channels, name=params.get("canal", "").replace(" ", "-").lower())
-                    resultado = await despin_mensaje(params.get("id"), canal)
-                elif action == "cambiar_nombre_servidor":
-                    resultado = await cambiar_nombre_servidor(guild, params.get("nombre"))
-                elif action == "cambiar_icono_servidor":
-                    resultado = await cambiar_icono_servidor(guild, params.get("url"))
-                elif action == "recordatorio":
-                    await programar_recordatorio(message, params.get("segundos", 60), params.get("contenido", ""))
-                    return
-                elif action == "crear_evento":
-                    resultado = await crear_evento(guild, params.get("nombre"), params.get("descripcion"), params.get("inicio"), params.get("canal"))
-                elif action == "eliminar_evento":
-                    resultado = await eliminar_evento(guild, params.get("nombre"))
+                resultado = None
+                if funcion:
+                    # Despacho dinámico (ajusta según parámetros de cada función)
+                    if action in ["crear_canal", "create_channel"]:
+                        resultado = await funcion(message.guild, params.get("nombre"), params.get("categoria"))
+                    elif action in ["eliminar_canal", "delete_channel"]:
+                        resultado = await funcion(message.guild, params.get("nombre"))
+                    elif action in ["renombrar_canal", "rename_channel"]:
+                        resultado = await funcion(message.guild, params.get("actual"), params.get("nuevo"))
+                    elif action in ["mover_canal", "move_channel"]:
+                        resultado = await funcion(message.guild, params.get("nombre"), params.get("categoria"))
+                    elif action in ["crear_categoria", "create_category"]:
+                        resultado = await funcion(message.guild, params.get("nombre"))
+                    elif action in ["eliminar_categoria", "delete_category"]:
+                        resultado = await funcion(message.guild, params.get("nombre"))
+                    elif action in ["renombrar_categoria", "rename_category"]:
+                        resultado = await funcion(message.guild, params.get("actual"), params.get("nuevo"))
+                    elif action in ["crear_rol", "create_role"]:
+                        resultado = await funcion(message.guild, params.get("nombre"))
+                    elif action in ["eliminar_rol", "delete_role"]:
+                        resultado = await funcion(message.guild, params.get("nombre"))
+                    elif action in ["renombrar_rol", "rename_role"]:
+                        resultado = await funcion(message.guild, params.get("actual"), params.get("nuevo"))
+                    elif action in ["asignar_rol", "assign_role"]:
+                        resultado = await funcion(message.guild, params.get("usuario"), params.get("rol"))
+                    elif action in ["quitar_rol", "remove_role"]:
+                        resultado = await funcion(message.guild, params.get("usuario"), params.get("rol"))
+                    elif action in ["modificar_permisos_canal", "modify_channel_permissions"]:
+                        resultado = await funcion(message.guild, params.get("canal"), params.get("rol"), params.get("permisos", {}))
+                    elif action in ["enviar_mensaje", "send_message"]:
+                        resultado = await funcion(message.guild, params.get("canal"), params.get("contenido"))
+                    elif action in ["pinar_mensaje", "pin_message"]:
+                        canal = discord.utils.get(message.guild.text_channels, name=params.get("canal", "").replace(" ", "-").lower())
+                        resultado = await funcion(params.get("id"), canal)
+                    elif action in ["despinar_mensaje", "unpin_message"]:
+                        canal = discord.utils.get(message.guild.text_channels, name=params.get("canal", "").replace(" ", "-").lower())
+                        resultado = await funcion(params.get("id"), canal)
+                    elif action in ["cambiar_nombre_servidor", "change_server_name"]:
+                        resultado = await funcion(message.guild, params.get("nombre"))
+                    elif action in ["cambiar_icono_servidor", "change_server_icon"]:
+                        resultado = await funcion(message.guild, params.get("url"))
+                    elif action in ["programar_recordatorio", "set_reminder"]:
+                        await funcion(message, params.get("segundos", 60), params.get("contenido", ""))
+                        return
+                    elif action in ["crear_evento", "create_event"]:
+                        resultado = await funcion(
+                            message.guild, params.get("nombre"),
+                            params.get("descripcion"), params.get("inicio"), params.get("canal")
+                        )
+                    elif action in ["eliminar_evento", "delete_event"]:
+                        resultado = await funcion(message.guild, params.get("nombre"))
+                    else:
+                        resultado = "🔔 Acción reconocida, pero aún no implementada."
                 else:
-                    resultado = "🤖 Acción reconocida pero aún no implementada."
+                    resultado = "🤖 Acción reconocida pero no está implementada en el bot."
 
                 await message.channel.send(resultado)
                 return
 
             except Exception as ex:
-                print("❌ Error ejecutando JSON:", ex)
-                await message.channel.send(f"⚠️ Error ejecutando comando: {ex}")
+                print("❌ Error ejecutando acción:", ex)
+                await message.channel.send(f"⚠️ Error ejecutando el comando: {ex}")
                 return
 
-        # Conversación casual o pregunta por dato faltante
-        await message.channel.send(content if content else "⚠️ No entendí el mensaje. ¿Puedes explicarme mejor?")
+        # Si no hay JSON: es charla, saludo o GPT pide info faltante
+        await message.channel.send(content if content else "⚠️ No entendí el mensaje, ¿puedes explicarlo de otra forma?")
         return
 
     except Exception as e:
@@ -336,4 +413,3 @@ async def on_message(message):
         await message.channel.send(f"⚠️ Error interno: {e}")
 
 client.run(discord_token)
-
