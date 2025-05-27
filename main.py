@@ -10,32 +10,26 @@ client = discord.Client(intents=intents)
 discord_token = os.getenv("DISCORD_TOKEN")
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
-# Función para validar si es JSON válido
-def es_json_valido(texto):
-    try:
-        json.loads(texto)
-        return True
-    except ValueError:
-        return False
-
 # Funciones administrativas
 async def crear_canal(guild, nombre):
-    channel_name = nombre.replace(" ", "-")[:100]
-    existing = discord.utils.get(guild.text_channels, name=channel_name)
-    if not existing:
-        await guild.create_text_channel(channel_name)
-        return f"✅ Canal creado: #{channel_name}"
-    return f"⚠️ Ya existe un canal llamado #{channel_name}"
+    nombre = nombre.replace(" ", "-").lower()
+    existente = discord.utils.get(guild.text_channels, name=nombre)
+    if not existente:
+        await guild.create_text_channel(nombre)
+        return f"✅ Canal creado: #{nombre}"
+    return f"⚠️ Ya existe el canal #{nombre}"
 
 async def eliminar_canal(guild, nombre):
-    canal = discord.utils.get(guild.text_channels, name=nombre.replace(" ", "-").lower())
+    nombre = nombre.replace(" ", "-").lower()
+    canal = discord.utils.get(guild.text_channels, name=nombre)
     if canal:
         await canal.delete()
         return f"🗑️ Canal eliminado: #{nombre}"
     return f"❌ No encontré el canal #{nombre}"
 
 async def enviar_mensaje(guild, canal_nombre, contenido):
-    canal = discord.utils.get(guild.text_channels, name=canal_nombre.replace(" ", "-").lower())
+    canal_nombre = canal_nombre.replace(" ", "-").lower()
+    canal = discord.utils.get(guild.text_channels, name=canal_nombre)
     if canal:
         await canal.send(contenido)
         return f"📨 Mensaje enviado a #{canal_nombre}"
@@ -61,7 +55,6 @@ async def programar_recordatorio(message, segundos, contenido):
     await asyncio.sleep(segundos)
     await message.channel.send(f"🔔 Recordatorio: {contenido}")
 
-# Activación del bot
 @client.event
 async def on_ready():
     print(f"✅ Lume está conectado como {client.user}")
@@ -75,15 +68,14 @@ async def on_message(message):
     guild = message.guild
 
     system_prompt = """
-Eres Lume, un asistente virtual con acceso total al servidor de Discord. Tu función es interpretar comandos de lenguaje natural y transformarlos en acciones dentro del servidor. Si la acción es clara, responde únicamente en JSON con el formato:
+Eres Lume, un asistente virtual con permisos administrativos en este servidor. Si el usuario da una orden clara relacionada a Discord, responde en formato JSON con:
 {
   "action": "nombre_funcion",
   "params": {
-    "param1": "valor1",
-    "param2": "valor2"
+    "param1": "valor1"
   }
 }
-Si es una conversación trivial o cultural, responde de forma conversacional.
+Si no es una orden o no estás seguro, responde normalmente como asistente conversacional.
 """
 
     try:
@@ -98,7 +90,8 @@ Si es una conversación trivial o cultural, responde de forma conversacional.
 
         content = response.choices[0].message.content.strip()
 
-        if es_json_valido(content):
+        # Intentar decodificar JSON si es un comando
+        try:
             data = json.loads(content)
             action = data.get("action")
             params = data.get("params", {})
@@ -118,16 +111,16 @@ Si es una conversación trivial o cultural, responde de forma conversacional.
                 await programar_recordatorio(message, int(params.get("segundos", 60)), params.get("contenido", ""))
                 return
             else:
-                resultado = "🤖 Aún no sé cómo hacer eso, pero estoy aprendiendo."
+                resultado = "⚠️ Comando no reconocido."
 
             await message.channel.send(resultado)
 
-        else:
-            # No es JSON → solo responde como conversación
+        except json.JSONDecodeError:
+            # No es un comando, solo responder como asistente
             await message.channel.send(content)
 
     except Exception as e:
-        print("❌ Error:", e)
+        print("❌ Error general:", e)
         await message.channel.send("⚠️ Hubo un error interno. Intenta de nuevo.")
-        
+
 client.run(discord_token)
