@@ -61,6 +61,8 @@ async def on_message(message):
     if message.author == client.user:
         return
 
+    print(f"🟡 Mensaje recibido: {message.content} de {message.author}")
+
     user_prompt = message.content
     guild = message.guild
 
@@ -86,7 +88,8 @@ Si es una conversación trivial o cultural, responde de forma conversacional.
             temperature=0.3
         )
 
-        content = response["choices"][0]["message"]["content"].strip()
+        content = response.choices[0].message.content.strip()
+        print(f"🧠 Respuesta generada:\n{content}")
 
         try:
             data = json.loads(content)
@@ -116,7 +119,7 @@ Si es una conversación trivial o cultural, responde de forma conversacional.
             await message.channel.send(content)
 
     except Exception as e:
-        print("❌ Error:", e)
-        await message.channel.send("⚠️ Hubo un error interno. Puedes intentar de nuevo o revisar el formato del comando.")
+        print("❌ Error en on_message:", e)
+        await message.channel.send("⚠️ Hubo un error interno. Intenta de nuevo.")
 
 client.run(discord_token)
