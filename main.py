@@ -113,10 +113,15 @@ Si es una conversación trivial o cultural, responde de forma conversacional.
             await message.channel.send(resultado)
 
         except json.JSONDecodeError:
-            await message.channel.send(content)
+            # Si no es JSON, se asume que es una respuesta conversacional
+            if content:
+                await message.channel.send(content)
+            else:
+                await message.channel.send("⚠️ No entendí el mensaje. ¿Puedes reformularlo?")
 
     except Exception as e:
-        print("❌ Error de ejecución:", e)
+        print("❌ Error:", e)
         await message.channel.send("⚠️ Hubo un error interno. Intenta de nuevo o revisa el formato del comando.")
 
 client.run(discord_token)
+
