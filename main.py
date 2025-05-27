@@ -24,7 +24,6 @@ def extract_json(text):
     return None
 
 # ========== FUNCIONES DISCORD ==========
-
 async def crear_canal(guild, nombre, categoria=None):
     nombre = nombre.replace(" ", "-").lower()
     if discord.utils.get(guild.text_channels, name=nombre):
@@ -79,6 +78,7 @@ async def on_message(message):
         {"role": "system", "content": system_prompt},
         {"role": "user", "content": prompt}
     ]
+
     try:
         response = openai.chat.completions.create(
             model="gpt-4-turbo",
@@ -87,28 +87,29 @@ async def on_message(message):
         )
         content = response.choices[0].message.content.strip()
         json_block = extract_json(content)
+
         if not json_block:
-            await message.channel.send("❌ No entendí tu mensaje.")
+            await message.channel.send(f"❌ No entendí tu mensaje. Respuesta GPT: {content}")
             return
 
         data = json.loads(json_block)
         action = data.get("action")
         params = data.get("params", {})
 
-        # Acciones implementadas
-        if action == "crear_canal":
-            canal_nombre = params.get("nombre")
-            resultado = await crear_canal(message.guild, canal_nombre)
+        if action in ACTION_MAP:
+            if action == "crear_canal":
+                resultado = await ACTION_MAP[action](message.guild, **params)
+            else:
+                resultado = await ACTION_MAP[action](message.channel, **params)
+
             await message.channel.send(resultado)
-        elif action == "enviar_mensaje":
-            texto = params.get("contenido") or params.get("mensaje")
-            await enviar_mensaje(message.channel, texto)
         else:
-            await message.channel.send("🤖 Acción reconocida pero no está implementada en el bot.")
+            await message.channel.send(f"🤖 Acción reconocida pero no implementada: {action}")
 
     except Exception as e:
         print("❌ Error:", e)
-        await message.channel.send(f"⚠️ Error: {e}")
+        await message.channel.send(f"⚠️ Error interno del bot: {e}")
 
 client.run(discord_token)
+
 
