@@ -10,8 +10,6 @@ client = discord.Client(intents=intents)
 discord_token = os.getenv("DISCORD_TOKEN")
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
-client_gpt = openai.OpenAI()  # NUEVA FORMA
-
 async def crear_canal(guild, nombre):
     channel_name = nombre.replace(" ", "-")[:100]
     existing = discord.utils.get(guild.text_channels, name=channel_name)
@@ -79,7 +77,7 @@ Si es una conversación trivial o cultural, responde de forma conversacional.
 """
 
     try:
-        response = client_gpt.chat.completions.create(
+        response = openai.ChatCompletion.create(
             model="gpt-4-turbo",
             messages=[
                 {"role": "system", "content": system_prompt},
@@ -90,6 +88,7 @@ Si es una conversación trivial o cultural, responde de forma conversacional.
 
         content = response.choices[0].message.content.strip()
 
+        # Intentamos interpretar el contenido como JSON
         try:
             data = json.loads(content)
             action = data.get("action")
@@ -115,10 +114,12 @@ Si es una conversación trivial o cultural, responde de forma conversacional.
             await message.channel.send(resultado)
 
         except json.JSONDecodeError:
+            # No era JSON, respondemos como asistente conversacional
             await message.channel.send(content)
 
     except Exception as e:
-        print("❌ Error:", e)
-        await message.channel.send("Ocurrió un error. Intenta de nuevo.")
+        print("❌ Error de ejecución:", e)
+        await message.channel.send("⚠️ Hubo un error interno. Puedes intentar de nuevo o revisar el formato del comando.")
 
 client.run(discord_token)
+
