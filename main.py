@@ -7,9 +7,6 @@ import json
 intents = discord.Intents.all()
 client = discord.Client(intents=intents)
 
-# Solo responder al dueño autorizado
-OWNER_ID = 1376312580943118337
-
 discord_token = os.getenv("DISCORD_TOKEN")
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
@@ -61,7 +58,11 @@ async def on_ready():
 
 @client.event
 async def on_message(message):
-    if message.author == client.user or message.author.id != OWNER_ID:
+    if message.author == client.user:
+        return
+
+    ADMIN_ID = 1376312580943118337
+    if message.author.id != ADMIN_ID:
         return
 
     user_prompt = message.content
@@ -123,4 +124,3 @@ Si es una conversación trivial o cultural, responde de forma conversacional.
         await message.channel.send("Ocurrió un error. Intenta de nuevo.")
 
 client.run(discord_token)
-
