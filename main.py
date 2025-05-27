@@ -3,6 +3,7 @@ import openai
 import os
 import asyncio
 import json
+import re
 
 intents = discord.Intents.all()
 client = discord.Client(intents=intents)
@@ -10,7 +11,25 @@ client = discord.Client(intents=intents)
 discord_token = os.getenv("DISCORD_TOKEN")
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
+# ==== Helpers ====
+
+def extract_json(text):
+    """Extrae el primer bloque JSON de un texto."""
+    match = re.search(r'\{.*\}', text, re.DOTALL)
+    if match:
+        try:
+            # Validar si realmente es un JSON decodable
+            json.loads(match.group(0))
+            return match.group(0)
+        except:
+            return None
+    return None
+
+# ==== Acciones Discord ====
+
 async def crear_canal(guild, nombre):
+    if not nombre:
+        return "❌ Falta el nombre del canal."
     channel_name = nombre.replace(" ", "-")[:100]
     existing = discord.utils.get(guild.text_channels, name=channel_name)
     if not existing:
@@ -19,6 +38,8 @@ async def crear_canal(guild, nombre):
     return f"⚠️ Ya existe un canal llamado #{channel_name}"
 
 async def eliminar_canal(guild, nombre):
+    if not nombre:
+        return "❌ Falta el nombre del canal."
     canal = discord.utils.get(guild.text_channels, name=nombre.replace(" ", "-").lower())
     if canal:
         await canal.delete()
@@ -26,6 +47,8 @@ async def eliminar_canal(guild, nombre):
     return f"❌ No encontré el canal #{nombre}"
 
 async def enviar_mensaje(guild, canal_nombre, contenido):
+    if not canal_nombre or not contenido:
+        return "❌ Falta el canal o el contenido."
     canal = discord.utils.get(guild.text_channels, name=canal_nombre.replace(" ", "-").lower())
     if canal:
         await canal.send(contenido)
@@ -33,6 +56,8 @@ async def enviar_mensaje(guild, canal_nombre, contenido):
     return f"❌ No encontré el canal #{canal_nombre}"
 
 async def crear_categoria(guild, nombre):
+    if not nombre:
+        return "❌ Falta el nombre de la categoría."
     existente = discord.utils.get(guild.categories, name=nombre)
     if not existente:
         await guild.create_category(nombre)
@@ -40,6 +65,8 @@ async def crear_categoria(guild, nombre):
     return f"⚠️ Ya existe la categoría {nombre}"
 
 async def asignar_rol(guild, miembro_nombre, rol_nombre):
+    if not miembro_nombre or not rol_nombre:
+        return "❌ Falta el usuario o el rol."
     miembro = discord.utils.find(lambda m: m.name == miembro_nombre or m.display_name == miembro_nombre, guild.members)
     rol = discord.utils.get(guild.roles, name=rol_nombre)
     if miembro and rol:
@@ -48,9 +75,19 @@ async def asignar_rol(guild, miembro_nombre, rol_nombre):
     return "❌ Usuario o rol no encontrado."
 
 async def programar_recordatorio(message, segundos, contenido):
+    if not contenido:
+        await message.channel.send("❌ Falta el contenido del recordatorio.")
+        return
+    try:
+        segundos = int(segundos)
+    except:
+        await message.channel.send("❌ El tiempo debe ser un número de segundos.")
+        return
     await message.channel.send(f"⏳ Te recordaré eso en {segundos} segundos.")
     await asyncio.sleep(segundos)
     await message.channel.send(f"🔔 Recordatorio: {contenido}")
+
+# ==== Discord Events ====
 
 @client.event
 async def on_ready():
@@ -85,41 +122,48 @@ Si es una conversación trivial o cultural, responde de forma conversacional.
             ],
             temperature=0.3
         )
-
         content = response.choices[0].message.content.strip()
+        print("🔎 Respuesta GPT:", content)  # LOG para debug
 
-        try:
-            data = json.loads(content)
-            action = data.get("action")
-            params = data.get("params", {})
+        json_block = extract_json(content)
+        if json_block:
+            try:
+                data = json.loads(json_block)
+                action = data.get("action")
+                params = data.get("params", {})
 
-            resultado = ""
-            if action == "crear_canal":
-                resultado = await crear_canal(guild, params.get("nombre", "sin-nombre"))
-            elif action == "eliminar_canal":
-                resultado = await eliminar_canal(guild, params.get("nombre", ""))
-            elif action == "enviar_mensaje":
-                resultado = await enviar_mensaje(guild, params.get("canal", ""), params.get("contenido", ""))
-            elif action == "crear_categoria":
-                resultado = await crear_categoria(guild, params.get("nombre", ""))
-            elif action == "asignar_rol":
-                resultado = await asignar_rol(guild, params.get("usuario", ""), params.get("rol", ""))
-            elif action == "recordatorio":
-                await programar_recordatorio(message, int(params.get("segundos", 60)), params.get("contenido", ""))
+                resultado = ""
+                if action == "crear_canal":
+                    resultado = await crear_canal(guild, params.get("nombre"))
+                elif action == "eliminar_canal":
+                    resultado = await eliminar_canal(guild, params.get("nombre"))
+                elif action == "enviar_mensaje":
+                    resultado = await enviar_mensaje(guild, params.get("canal"), params.get("contenido"))
+                elif action == "crear_categoria":
+                    resultado = await crear_categoria(guild, params.get("nombre"))
+                elif action == "asignar_rol":
+                    resultado = await asignar_rol(guild, params.get("usuario"), params.get("rol"))
+                elif action == "recordatorio":
+                    await programar_recordatorio(message, params.get("segundos", 60), params.get("contenido", ""))
+                    return
+                else:
+                    resultado = "🤖 Acción no reconocida o aún no implementada."
+
+                await message.channel.send(resultado)
                 return
-            else:
-                resultado = "🤖 Aún no sé cómo hacer eso, pero estoy aprendiendo."
 
-            await message.channel.send(resultado)
+            except Exception as ex:
+                print("❌ Error al procesar el JSON:", ex)
+                await message.channel.send(f"⚠️ Error al procesar comando: {ex}")
+                return
 
-        except json.JSONDecodeError:
-            if content:
-                await message.channel.send(content)
-            else:
-                await message.channel.send("⚠️ No entendí el mensaje. ¿Puedes reformularlo?")
+        # Si no se detecta JSON, muestra la respuesta de GPT
+        await message.channel.send(content if content else "⚠️ No entendí el mensaje. ¿Puedes reformularlo?")
+        return
 
     except Exception as e:
-        print("❌ Error:", e)
-        await message.channel.send("⚠️ Hubo un error interno. Intenta de nuevo o revisa el formato del comando.")
+        print("❌ Error general:", e)
+        await message.channel.send(f"⚠️ Error interno: {e}")
 
 client.run(discord_token)
+
