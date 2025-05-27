@@ -3,6 +3,7 @@ import openai
 import os
 import asyncio
 import json
+import traceback
 
 intents = discord.Intents.all()
 client = discord.Client(intents=intents)
@@ -61,10 +62,6 @@ async def on_message(message):
     if message.author == client.user:
         return
 
-    ADMIN_ID = 1376312580943118337
-    if message.author.id != ADMIN_ID:
-        return
-
     user_prompt = message.content
     guild = message.guild
 
@@ -120,7 +117,6 @@ Si es una conversación trivial o cultural, responde de forma conversacional.
             await message.channel.send(content)
 
     except Exception as e:
-        import traceback
         traceback.print_exc()
         await message.channel.send("Ocurrió un error. Intenta de nuevo.")
 
