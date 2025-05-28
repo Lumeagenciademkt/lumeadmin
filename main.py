@@ -13,12 +13,17 @@ openai.api_key = os.getenv("OPENAI_API_KEY")
 
 # ========== EXTRAE JSON GPT ==========
 def extract_json(text):
-    match = re.search(r'\{[\s\S]*?\}', text)
+    # Buscar el primer bloque { ... }
+    match = re.search(r'\{[\s\S]*?\}$', text.strip(), re.MULTILINE)
+    if not match:
+        # Busca el primer { ... } aunque esté entre texto
+        match = re.search(r'\{[\s\S]*?\}', text)
     if match:
         try:
             return json.loads(match.group(0))
         except Exception as e:
             print("Error decoding JSON:", e)
+            print("Texto bruto:", text)
             return None
     return None
 
@@ -109,3 +114,4 @@ async def on_message(message):
         await message.channel.send(f"⚠️ Error interno del bot: {e}")
 
 client.run(discord_token)
+
